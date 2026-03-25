@@ -3099,7 +3099,7 @@ float ImGui::TableGetHeaderAngledMaxLabelWidth()
     for (int column_n = 0; column_n < table->ColumnsCount; column_n++)
         if (IM_BITARRAY_TESTBIT(table->EnabledMaskByIndex, column_n))
             if (table->Columns[column_n].Flags & ImGuiTableColumnFlags_AngledHeader)
-                width = ImMax(width, CalcTextSize(TableGetColumnName(table, column_n), NULL, true).x);
+                width = ImMax(width, CalcTextSize(TableGetColumnName(table, column_n), true).x);
     return width + g.Style.CellPadding.y * 2.0f; // Swap padding
 }
 
