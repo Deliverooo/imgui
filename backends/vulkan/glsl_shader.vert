@@ -1,25 +1,37 @@
-#version 450 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUV;
-layout(location = 2) in vec4 aColor;
+#version 460
 
-layout(push_constant) uniform uPushConstant {
-    vec2 uScale;
-    vec2 uTranslate;
-} pc;
+#extension GL_EXT_nonuniform_qualifier: require
+#extension GL_EXT_scalar_block_layout: require
+#extension GL_EXT_buffer_reference2: require
 
-out gl_PerVertex {
-    vec4 gl_Position;
+struct Vertex
+{
+    vec2 position;
+    vec2 texCoord;
+    vec4 colour;
 };
 
-layout(location = 0) out struct {
-    vec4 Color;
-    vec2 UV;
-} Out;
+layout (buffer_reference, scalar) readonly buffer VertexBuffer { Vertex vertices[]; };
+
+layout (push_constant) uniform PushData
+{
+    VertexBuffer vertexBuffer;
+
+    vec2 scale;
+    vec2 translate;
+
+    uint textureHeapSlot;
+    uint samplerHeapSlot;
+} pcs;
+
+layout (location = 0u) out vec4 o_Colour;
+layout (location = 1u) out vec2 o_TexCoord;
 
 void main()
 {
-    Out.Color = aColor;
-    Out.UV = aUV;
-    gl_Position = vec4(aPos * pc.uScale + pc.uTranslate, 0, 1);
+    Vertex vertex = pcs.vertexBuffer.vertices[gl_VertexIndex];
+
+    o_Colour = vertex.colour;
+    o_TexCoord = vertex.texCoord;
+    gl_Position = vec4(vertex.position * pcs.scale + pcs.translate, 0.0f, 1.0f);
 }

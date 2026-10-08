@@ -107,7 +107,7 @@ struct ImGui_ImplVulkan_PipelineInfo
 //   - As an convenience, by setting DescriptorPoolSize > 0 the backend will create one for you.
 // - About dynamic rendering:
 //   - When using dynamic rendering, set UseDynamicRendering=true + fill PipelineInfoMain.PipelineRenderingCreateInfo structure.
-struct ImGui_ImplVulkan_InitInfo
+struct ImGui_ImplToaster_InitInfo
 {
     uint32_t                        ApiVersion;                 // Fill with API version of Instance, e.g. VK_API_VERSION_1_3 or your value of VkApplicationInfo::apiVersion. May be lower than header version (VK_HEADER_VERSION_COMPLETE)
     VkInstance                      Instance;
@@ -146,7 +146,7 @@ struct ImGui_ImplVulkan_InitInfo
 };
 
 // Follow "Getting Started" link and check examples/ folder to learn about using backends!
-IMGUI_IMPL_API bool             ImGui_ImplVulkan_Init(ImGui_ImplVulkan_InitInfo* info);
+IMGUI_IMPL_API bool             ImGui_ImplVulkan_Init(ImGui_ImplToaster_InitInfo* info);
 IMGUI_IMPL_API void             ImGui_ImplVulkan_Shutdown();
 IMGUI_IMPL_API void             ImGui_ImplVulkan_NewFrame();
 IMGUI_IMPL_API void             ImGui_ImplVulkan_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer command_buffer, VkPipeline pipeline = VK_NULL_HANDLE);
@@ -201,7 +201,7 @@ struct ImGui_ImplVulkan_RenderState
 // by the regular ImGui_ImplVulkan_XXX functions.
 //-------------------------------------------------------------------------
 
-struct ImGui_ImplVulkanH_Frame;
+struct ImGui_ImplToasterH_Frame;
 struct ImGui_ImplVulkanH_Window;
 
 // Helpers
@@ -217,7 +217,7 @@ IMGUI_IMPL_API ImGui_ImplVulkanH_Window* ImGui_ImplVulkanH_GetWindowDataFromView
 // Helper structure to hold the data needed by one rendering frame
 // (Used by example's main.cpp. Used by multi-viewport features. Probably NOT used by your own engine/app.)
 // [Please zero-clear before use!]
-struct ImGui_ImplVulkanH_Frame
+struct ImGui_ImplToasterH_Frame
 {
     VkCommandPool       CommandPool;
     VkCommandBuffer     CommandBuffer;
@@ -254,7 +254,7 @@ struct ImGui_ImplVulkanH_Window
     uint32_t                ImageCount;         // Number of simultaneous in-flight frames (returned by vkGetSwapchainImagesKHR, usually derived from min_image_count)
     uint32_t                SemaphoreCount;     // Number of simultaneous in-flight frames + 1, to be able to use it in vkAcquireNextImageKHR
     uint32_t                SemaphoreIndex;     // Current set of swapchain wait semaphores we're using (needs to be distinct from per frame data)
-    ImVector<ImGui_ImplVulkanH_Frame>           Frames;
+    ImVector<ImGui_ImplToasterH_Frame>           Frames;
     ImVector<ImGui_ImplVulkanH_FrameSemaphores> FrameSemaphores;
 
     ImGui_ImplVulkanH_Window()

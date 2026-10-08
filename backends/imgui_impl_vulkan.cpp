@@ -289,7 +289,7 @@ struct ImGui_ImplVulkan_ViewportData
 // Vulkan data
 struct ImGui_ImplVulkan_Data
 {
-    ImGui_ImplVulkan_InitInfo   VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo   VulkanInitInfo;
     VkDeviceSize                BufferMemoryAlignment;
     VkDeviceSize                NonCoherentAtomSize;
     VkPipelineCreateFlags       PipelineCreateFlags;
@@ -446,7 +446,7 @@ static ImGui_ImplVulkan_Data* ImGui_ImplVulkan_GetBackendData()
 static uint32_t ImGui_ImplVulkan_MemoryType(VkMemoryPropertyFlags properties, uint32_t type_bits)
 {
     ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
     VkPhysicalDeviceMemoryProperties prop;
     vkGetPhysicalDeviceMemoryProperties(v->PhysicalDevice, &prop);
     for (uint32_t i = 0; i < prop.memoryTypeCount; i++)
@@ -460,7 +460,7 @@ static void check_vk_result(VkResult err)
     ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
     if (!bd)
         return;
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
     if (v->CheckVkResultFn)
         v->CheckVkResultFn(err);
 }
@@ -474,7 +474,7 @@ static inline VkDeviceSize AlignBufferSize(VkDeviceSize size, VkDeviceSize align
 static void CreateOrResizeBuffer(VkBuffer& buffer, VkDeviceMemory& buffer_memory, VkDeviceSize& buffer_size, VkDeviceSize new_size, VkBufferUsageFlagBits usage)
 {
     ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
     VkResult err;
     if (buffer != VK_NULL_HANDLE)
         vkDestroyBuffer(v->Device, buffer, v->Allocator);
@@ -566,7 +566,7 @@ void ImGui_ImplVulkan_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer comm
                 ImGui_ImplVulkan_UpdateTexture(tex);
 
     ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
     if (pipeline == VK_NULL_HANDLE)
         pipeline = bd->Pipeline;
 
@@ -711,7 +711,7 @@ static void ImGui_ImplVulkan_DestroyTexture(ImTextureData* tex)
     {
         IM_ASSERT(backend_tex->DescriptorSet == (VkDescriptorSet)tex->TexID);
         ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-        ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+        ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
         ImGui_ImplVulkan_RemoveTexture(backend_tex->DescriptorSet);
         vkDestroyImageView(v->Device, backend_tex->ImageView, v->Allocator);
         vkDestroyImage(v->Device, backend_tex->Image, v->Allocator);
@@ -730,7 +730,7 @@ void ImGui_ImplVulkan_UpdateTexture(ImTextureData* tex)
     if (tex->Status == ImTextureStatus_OK)
         return;
     ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
     VkResult err;
 
     if (tex->Status == ImTextureStatus_WantCreate)
@@ -936,7 +936,7 @@ void ImGui_ImplVulkan_UpdateTexture(ImTextureData* tex)
 static void ImGui_ImplVulkan_CreateShaderModules(VkDevice device, const VkAllocationCallbacks* allocator)
 {
     ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
     if (bd->ShaderModuleVert == VK_NULL_HANDLE)
     {
         VkShaderModuleCreateInfo default_vert_info = {};
@@ -1084,7 +1084,7 @@ static VkPipeline ImGui_ImplVulkan_CreatePipeline(VkDevice device, const VkAlloc
 bool ImGui_ImplVulkan_CreateDeviceObjects()
 {
     ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
     VkResult err;
 
     if (!bd->TexSamplerLinear)
@@ -1186,7 +1186,7 @@ bool ImGui_ImplVulkan_CreateDeviceObjects()
 void ImGui_ImplVulkan_CreateMainPipeline(const ImGui_ImplVulkan_PipelineInfo* pipeline_info_in)
 {
     ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
     if (bd->Pipeline)
     {
         vkDestroyPipeline(v->Device, bd->Pipeline, v->Allocator);
@@ -1214,7 +1214,7 @@ void ImGui_ImplVulkan_CreateMainPipeline(const ImGui_ImplVulkan_PipelineInfo* pi
 void    ImGui_ImplVulkan_DestroyDeviceObjects()
 {
     ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
     ImGui_ImplVulkanH_DestroyAllViewportsRenderBuffers(v->Device, v->Allocator);
 
     // Destroy all textures
@@ -1293,7 +1293,7 @@ bool    ImGui_ImplVulkan_LoadFunctions(uint32_t api_version, PFN_vkVoidFunction(
     return true;
 }
 
-bool    ImGui_ImplVulkan_Init(ImGui_ImplVulkan_InitInfo* info)
+bool    ImGui_ImplVulkan_Init(ImGui_ImplToaster_InitInfo* info)
 {
     IM_ASSERT(g_FunctionsLoaded && "Need to call ImGui_ImplVulkan_LoadFunctions() if IMGUI_IMPL_VULKAN_NO_PROTOTYPES or VK_NO_PROTOTYPES are set!");
 
@@ -1398,7 +1398,7 @@ void ImGui_ImplVulkan_SetMinImageCount(uint32_t min_image_count)
         return;
 
     IM_ASSERT(0); // FIXME-VIEWPORT: Unsupported. Need to recreate all swap chains!
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
     VkResult err = vkDeviceWaitIdle(v->Device);
     check_vk_result(err);
     ImGui_ImplVulkanH_DestroyAllViewportsRenderBuffers(v->Device, v->Allocator);
@@ -1411,7 +1411,7 @@ void ImGui_ImplVulkan_SetMinImageCount(uint32_t min_image_count)
 VkDescriptorSet ImGui_ImplVulkan_AddTexture(VkSampler sampler, VkImageView image_view, VkImageLayout image_layout)
 {
     ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
     VkDescriptorPool pool = bd->DescriptorPool ? bd->DescriptorPool : v->DescriptorPool;
 
     // Create Descriptor Set:
@@ -1447,7 +1447,7 @@ VkDescriptorSet ImGui_ImplVulkan_AddTexture(VkSampler sampler, VkImageView image
 void ImGui_ImplVulkan_RemoveTexture(VkDescriptorSet descriptor_set)
 {
     ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
     VkDescriptorPool pool = bd->DescriptorPool ? bd->DescriptorPool : v->DescriptorPool;
     vkFreeDescriptorSets(v->Device, pool, 1, &descriptor_set);
 }
@@ -1978,7 +1978,7 @@ static void ImGui_ImplVulkan_CreateWindow(ImGuiViewport* viewport)
     ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
     ImGui_ImplVulkan_ViewportData* vd = IM_NEW(ImGui_ImplVulkan_ViewportData)();
     ImGui_ImplVulkanH_Window* wd = &vd->Window;
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
 
     // Create surface
     ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
@@ -2054,7 +2054,7 @@ static void ImGui_ImplVulkan_DestroyWindow(ImGuiViewport* viewport)
     ImGui_ImplVulkan_Data* bd = ImGui_ImplVulkan_GetBackendData();
     if (ImGui_ImplVulkan_ViewportData* vd = (ImGui_ImplVulkan_ViewportData*)viewport->RendererUserData)
     {
-        ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+        ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
         if (vd->WindowOwned)
         {
             ImGui_ImplVulkanH_DestroyWindow(v->Instance, v->Device, &vd->Window, v->Allocator);
@@ -2072,7 +2072,7 @@ static void ImGui_ImplVulkan_SetWindowSize(ImGuiViewport* viewport, ImVec2 size)
     ImGui_ImplVulkan_ViewportData* vd = (ImGui_ImplVulkan_ViewportData*)viewport->RendererUserData;
     if (vd == nullptr) // This is nullptr for the main viewport (which is left to the user/app to handle)
         return;
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
     ImGui_ImplVulkanH_Window* wd = &vd->Window;
     wd->AttachmentDesc.loadOp = (viewport->Flags & ImGuiViewportFlags_NoRendererClear) ? VK_ATTACHMENT_LOAD_OP_DONT_CARE : VK_ATTACHMENT_LOAD_OP_CLEAR;
     ImGui_ImplVulkanH_CreateOrResizeWindow(v->Instance, v->PhysicalDevice, v->Device, &vd->Window, v->QueueFamily, v->Allocator, (int)size.x, (int)size.y, v->MinImageCount, v->PipelineInfoForViewports.SwapChainImageUsage);
@@ -2085,7 +2085,7 @@ static void ImGui_ImplVulkan_RenderWindow(ImGuiViewport* viewport, void*)
     if (vd == nullptr)
         return;
     ImGui_ImplVulkanH_Window* wd = &vd->Window;
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
     VkResult err;
 
     if (vd->SwapChainNeedRebuild || vd->SwapChainSuboptimal)
@@ -2234,7 +2234,7 @@ static void ImGui_ImplVulkan_SwapBuffers(ImGuiViewport* viewport, void*)
     if (vd == nullptr)
         return;
     ImGui_ImplVulkanH_Window* wd = &vd->Window;
-    ImGui_ImplVulkan_InitInfo* v = &bd->VulkanInitInfo;
+    ImGui_ImplToaster_InitInfo* v = &bd->VulkanInitInfo;
 
     if (vd->SwapChainNeedRebuild) // Frame data became invalid in the middle of rendering
         return;
