@@ -499,6 +499,9 @@ bool ImGui_ImplToaster_Init(ImGui_ImplToaster_InitInfo &info)
 
 	bd->ToasterInitInfo = info;
 
+	bd->resourceHeap = info.resourceHeap;
+	bd->samplerHeap  = info.samplerHeap;
+
 	if (!ImGui_ImplToaster_CreateDeviceObjects())
 		IM_ASSERT(0 && "ImGui_ImplToaster_CreateDeviceObjects() failed!"); // <- Can't be hit yet.
 
