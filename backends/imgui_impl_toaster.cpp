@@ -17,10 +17,6 @@ bool ImGui_ImplToaster_CreateDeviceObjects();
 void ImGui_ImplToaster_DestroyDeviceObjects();
 void ImGui_ImplToaster_DestroyFrameRenderBuffers(ImGui_ImplToaster_FrameRenderBuffers *buffers);
 void ImGui_ImplToaster_DestroyWindowRenderBuffers(ImGui_ImplToaster_ToasterRenderBuffers *buffers);
-// void ImGui_ImplToasterH_DestroyFrame(ImGui_ImplToasterH_Frame *fd);
-// void ImGui_ImplToasterH_DestroyAllViewportsRenderBuffers();
-// void ImGui_ImplToasterH_CreateWindowSwapChain(ImGui_ImplToasterH_Window *wd, int w, int h);
-// void ImGui_ImplToasterH_CreateWindowCommandBuffers(ImGui_ImplToasterH_Window *wd);
 
 // Reusable buffers used for rendering 1 current in-flight frame, for ImGui_ImplToaster_RenderDrawData()
 // [Please zero-clear before use!]
@@ -122,7 +118,7 @@ static void ImGui_ImplToaster_SetupRenderState(ImDrawData *draw_data, toaster::g
 
 	toaster::gpu::setRasterizerDiscardEnable(p_command_list, false);
 	toaster::gpu::setPolygonMode(p_command_list, toaster::gpu::EPolygonMode::eFill);
-	toaster::gpu::setCullMode(p_command_list, toaster::gpu::ECullMode::eBack);
+	toaster::gpu::setCullMode(p_command_list, toaster::gpu::ECullMode::eNone);
 	toaster::gpu::setFrontFace(p_command_list, toaster::gpu::EFrontFace::eCCW);
 	toaster::gpu::setDepthBias(p_command_list, false);
 	toaster::gpu::setLineWidth(p_command_list, 1.0f);
@@ -134,10 +130,20 @@ static void ImGui_ImplToaster_SetupRenderState(ImDrawData *draw_data, toaster::g
 
 	toaster::gpu::setColourWriteEnable(p_command_list, {true});
 	toaster::gpu::setColourWriteMask(p_command_list, {toaster::gpu::EColourComponentFlagBits::eAll});
+	toaster::gpu::setColourBlendEnable(p_command_list, {true});
+
+	toaster::gpu::ColourBlendEquation blend_equation{};
+	blend_equation.srcColorBlendFactor = toaster::gpu::EBlendFactor::eSrcAlpha;
+	blend_equation.dstColorBlendFactor = toaster::gpu::EBlendFactor::eOneMinusSrcAlpha;
+	blend_equation.colorBlendOp        = toaster::gpu::EBlendOp::eAdd;
+	blend_equation.srcAlphaBlendFactor = toaster::gpu::EBlendFactor::eOne;
+	blend_equation.dstAlphaBlendFactor = toaster::gpu::EBlendFactor::eOneMinusSrcAlpha;
+	blend_equation.alphaBlendOp        = toaster::gpu::EBlendOp::eAdd;
+	toaster::gpu::setColourBlendEquation(p_command_list, blend_equation);
 
 	if (draw_data->TotalVtxCount > 0)
 	{
-		toaster::gpu::bindIndexBuffer(p_command_list, rb->indexBuffer);
+		toaster::gpu::bindIndexBuffer(p_command_list, rb->indexBuffer, toaster::gpu::EIndexType::eUint16);
 	}
 
 	toaster::gpu::setViewport(p_command_list, tsm::Viewport{{static_cast<float32>(fb_width), static_cast<float32>(fb_height)}});
@@ -172,10 +178,6 @@ void ImGui_ImplToaster_RenderDrawData(ImDrawData *draw_data, toaster::gpu::Comma
 
 	ImGui_ImplToaster_Data *    bd = ImGui_ImplToaster_GetBackendData();
 	ImGui_ImplToaster_InitInfo *v  = &bd->ToasterInitInfo;
-	// if (pipeline == VK_NULL_HANDLE)
-	// pipeline = bd->Pipeline;
-
-	//TODO
 
 	// Allocate array to store enough vertex/index buffers. Each unique viewport gets its own storage.
 	auto *viewport_renderer_data = static_cast<ImGui_ImplToaster_ViewportData *>(draw_data->OwnerViewport->RendererUserData);
@@ -282,6 +284,7 @@ void ImGui_ImplToaster_RenderDrawData(ImDrawData *draw_data, toaster::gpu::Comma
 					PushData::TexData tex_data{};
 					tex_data.texHeapSlot     = tex_heap_slot;
 					tex_data.samplerHeapSlot = bd->TexSamplerLinearHeapSlot;
+					IM_ASSERT(tex_data.texHeapSlot != UINT32_MAX && tex_data.samplerHeapSlot != UINT32_MAX);
 					toaster::gpu::pushData<PushData::TexData>(p_command_list, tex_data, offsetof(PushData, texData));
 				}
 				last_tex_heap_slot = tex_heap_slot;
@@ -365,7 +368,7 @@ void ImGui_ImplToaster_UpdateTexture(ImTextureData *tex)
 		toaster::gpu::upload::TextureUploadDesc upload_desc{};
 		upload_desc.size       = upload_pitch * upload_h;
 		upload_desc.extent     = {static_cast<uint32>(upload_w), static_cast<uint32>(upload_h), 1u};
-		upload_desc.layerCount = 1u;;
+		upload_desc.layerCount = 1u;
 		upload_desc.baseLayer  = 0u;
 		upload_desc.dstTexture = backend_tex->texture;
 
@@ -378,6 +381,7 @@ void ImGui_ImplToaster_UpdateTexture(ImTextureData *tex)
 		const auto state_tracker{toaster::gpu::upload::registerStateTracker(1u)};
 		toaster::gpu::upload::uploadDataToTexture(upload_desc, state_tracker);
 		toaster::gpu::upload::waitForStateTracker(state_tracker);
+		toaster::gpu::waitQueueIdle(toaster::gpu::EQueueType::eTransfer);
 
 		tex->SetStatus(ImTextureStatus_OK);
 	}
@@ -388,8 +392,7 @@ void ImGui_ImplToaster_UpdateTexture(ImTextureData *tex)
 
 static void ImGui_ImplToaster_CreateShaderModules()
 {
-	ImGui_ImplToaster_Data *    bd = ImGui_ImplToaster_GetBackendData();
-	ImGui_ImplToaster_InitInfo *v  = &bd->ToasterInitInfo;
+	ImGui_ImplToaster_Data *bd = ImGui_ImplToaster_GetBackendData();
 	if (!bd->vertexShader)
 	{
 		toaster::gpu::ShaderDesc vertex_shader_desc{};

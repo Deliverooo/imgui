@@ -17,7 +17,7 @@ layout (descriptor_heap) uniform sampler samplerHeap[];
 layout (push_constant) uniform PushData
 {
     uint64_t vertexBuffer;
-    
+
     vec2 scale;
     vec2 translate;
 
@@ -29,5 +29,8 @@ layout (location = 0u) out vec4 o_Colour;
 
 void main()
 {
+    //    o_Colour = vec4(1.0f);
     o_Colour = v_Colour * SAMPLE_TEXTURE(pcs.textureHeapSlot, pcs.samplerHeapSlot, v_TexCoord);
+    ///
+    //    o_Colour = vec4(v_TexCoord, 0.0f, 1.0f);
 }

@@ -23,3 +23,15 @@ target_link_libraries(ImGui PUBLIC Toaster::ToastGPU glfw)
 
 target_sources(ImGui PRIVATE ${IMGUI_SRC})
 target_include_directories(ImGui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+option(IMGUI_BUILD_TESTS "Build the one debug test" ON)
+
+if (IMGUI_BUILD_TESTS)
+	add_executable(ImGuiTest WIN32)
+
+	target_link_libraries(ImGuiTest PRIVATE ImGui Toaster::ToastKernel Toaster::ToastOS Toaster::ToastAsset)
+	target_sources(ImGuiTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/examples/example_toaster/main.cpp")
+	target_include_directories(ImGuiTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/examples/example_toaster")
+endif ()
+
+

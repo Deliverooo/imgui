@@ -8,7 +8,7 @@ struct Vertex
 {
     vec2 position;
     vec2 texCoord;
-    vec4 colour;
+    uint colour;
 };
 
 layout (buffer_reference, scalar) readonly buffer VertexBuffer { Vertex vertices[]; };
@@ -31,7 +31,8 @@ void main()
 {
     Vertex vertex = pcs.vertexBuffer.vertices[gl_VertexIndex];
 
-    o_Colour = vertex.colour;
+    o_Colour = unpackUnorm4x8(vertex.colour);
+    //    o_Colour = vec4(1.0f);
     o_TexCoord = vertex.texCoord;
     gl_Position = vec4(vertex.position * pcs.scale + pcs.translate, 0.0f, 1.0f);
 }
