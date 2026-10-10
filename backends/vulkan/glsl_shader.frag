@@ -29,8 +29,6 @@ layout (location = 0u) out vec4 o_Colour;
 
 void main()
 {
-    //    o_Colour = vec4(1.0f);
-    o_Colour = v_Colour * SAMPLE_TEXTURE(pcs.textureHeapSlot, pcs.samplerHeapSlot, v_TexCoord);
-    ///
-    //    o_Colour = vec4(v_TexCoord, 0.0f, 1.0f);
+    vec4 tex_colour = SAMPLE_TEXTURE(pcs.textureHeapSlot, pcs.samplerHeapSlot, v_TexCoord);
+    o_Colour = v_Colour * tex_colour;
 }

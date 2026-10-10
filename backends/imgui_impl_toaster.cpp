@@ -368,6 +368,7 @@ void ImGui_ImplToaster_UpdateTexture(ImTextureData *tex)
 		toaster::gpu::upload::TextureUploadDesc upload_desc{};
 		upload_desc.size       = upload_pitch * upload_h;
 		upload_desc.extent     = {static_cast<uint32>(upload_w), static_cast<uint32>(upload_h), 1u};
+		upload_desc.offset     = {upload_x, upload_y, 0};
 		upload_desc.layerCount = 1u;
 		upload_desc.baseLayer  = 0u;
 		upload_desc.dstTexture = backend_tex->texture;
@@ -381,7 +382,6 @@ void ImGui_ImplToaster_UpdateTexture(ImTextureData *tex)
 		const auto state_tracker{toaster::gpu::upload::registerStateTracker(1u)};
 		toaster::gpu::upload::uploadDataToTexture(upload_desc, state_tracker);
 		toaster::gpu::upload::waitForStateTracker(state_tracker);
-		toaster::gpu::waitQueueIdle(toaster::gpu::EQueueType::eTransfer);
 
 		tex->SetStatus(ImTextureStatus_OK);
 	}
@@ -421,17 +421,19 @@ bool ImGui_ImplToaster_CreateDeviceObjects()
 {
 	ImGui_ImplToaster_Data *    bd = ImGui_ImplToaster_GetBackendData();
 	ImGui_ImplToaster_InitInfo *v  = &bd->ToasterInitInfo;
-	// VkResult                    err;
 
 	if (!bd->TexSamplerLinear.valid())
 	{
 		toaster::gpu::SamplerDesc sampler_desc{};
-		sampler_desc.minFilter    = toaster::gpu::EFilter::eLinear;
-		sampler_desc.magFilter    = toaster::gpu::EFilter::eLinear;
-		sampler_desc.mipmapMode   = toaster::gpu::ESamplerMipmapMode::eLinear;
-		sampler_desc.addressModeU = toaster::gpu::ESamplerAddressMode::eClampToEdge;
-		sampler_desc.addressModeV = toaster::gpu::ESamplerAddressMode::eClampToEdge;
-		sampler_desc.addressModeW = toaster::gpu::ESamplerAddressMode::eClampToEdge;
+		sampler_desc.minFilter     = toaster::gpu::EFilter::eLinear;
+		sampler_desc.magFilter     = toaster::gpu::EFilter::eLinear;
+		sampler_desc.mipmapMode    = toaster::gpu::ESamplerMipmapMode::eLinear;
+		sampler_desc.addressModeU  = toaster::gpu::ESamplerAddressMode::eClampToEdge;
+		sampler_desc.addressModeV  = toaster::gpu::ESamplerAddressMode::eClampToEdge;
+		sampler_desc.addressModeW  = toaster::gpu::ESamplerAddressMode::eClampToEdge;
+		sampler_desc.minLod        = -1000.0f;
+		sampler_desc.maxLod        = 1000.0f;
+		sampler_desc.maxAnisotropy = 1.0f;
 
 		bd->TexSamplerLinear         = toaster::gpu::createSampler(sampler_desc);
 		bd->TexSamplerLinearHeapSlot = toaster::gpu::allocSamplerHeapSlot(bd->samplerHeap);
@@ -439,27 +441,6 @@ bool ImGui_ImplToaster_CreateDeviceObjects()
 	}
 
 	ImGui_ImplToaster_CreateShaderModules();
-	// 	ImGui_ImplToaster_CreateMainPipeline(&v->PipelineInfoMain);
-	//
-	// // Create command pool/buffer for texture upload
-	// if (!bd->TexCommandPool)
-	// {
-	// 	VkCommandPoolCreateInfo info = {};
-	// 	info.sType                   = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	// 	info.flags                   = 0;
-	// 	info.queueFamilyIndex        = v->QueueFamily;
-	// 	err                          = vkCreateCommandPool(v->Device, &info, v->Allocator, &bd->TexCommandPool);
-	// 	check_vk_result(err);
-	// }
-	// if (!bd->TexCommandBuffer)
-	// {
-	// 	VkCommandBufferAllocateInfo info = {};
-	// 	info.sType                       = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	// 	info.commandPool                 = bd->TexCommandPool;
-	// 	info.commandBufferCount          = 1;
-	// 	err                              = vkAllocateCommandBuffers(v->Device, &info, &bd->TexCommandBuffer);
-	// 	check_vk_result(err);
-	// }
 
 	return true;
 }
@@ -551,6 +532,7 @@ uint32 ImGui_ImplToaster_AddTexture(toaster::gpu::TextureHandle p_texture)
 
 	const uint32 heap_slot{toaster::gpu::allocTextureHeapSlot(bd->resourceHeap)};
 	toaster::gpu::writeTextureDescriptor(bd->resourceHeap, heap_slot, p_texture, false);
+
 	return heap_slot;
 }
 

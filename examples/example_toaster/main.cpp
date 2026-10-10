@@ -62,20 +62,7 @@ public:
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		ImGui::Begin("Orbo");
-
-		if (m_texture)
-		{
-			const auto &texture_data{m_textureManager->getTexture(m_texture)};
-			if (gpu::upload::isStateTrackerReady(texture_data.stateTracker))
-			{
-				const auto &gpu_tex_desc{gpu::getTextureDesc(texture_data.texture)};
-				ImGui::Image(texture_data.shaderReadHeapSlot, {(float32) gpu_tex_desc.extent.x, (float32) gpu_tex_desc.extent.y});
-			}
-		}
-
-		ImGui::Text("Peeb");
-		ImGui::End();
+		ImGui::ShowDemoWindow();
 
 		ImGui::Render();
 
