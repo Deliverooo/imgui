@@ -5,6 +5,7 @@
 
 #include <backends/vulkan/glsl_shader.vert.h>
 #include <backends/vulkan/glsl_shader.frag.h>
+#include <toast_gpu/api.hpp>
 
 #ifndef IM_MAX
 #define IM_MAX(A, B)    (((A) >= (B)) ? (A) : (B))
@@ -55,6 +56,9 @@ struct ImGui_ImplToaster_Data
 {
 	ImGui_ImplToaster_InitInfo ToasterInitInfo;
 
+	toaster::gpu::GPUContext *   gpuCtx{nullptr};
+	toaster::gpu::UploadContext *uploadCtx{nullptr};
+
 	toaster::gpu::ShaderHandle vertexShader{nullptr};
 	toaster::gpu::ShaderHandle fragmentShader{nullptr};
 
@@ -78,14 +82,14 @@ static void CreateOrResizeBuffer(toaster::gpu::BufferHandle &p_out_buffer, uint6
 	ImGui_ImplToaster_InitInfo *v  = &bd->ToasterInitInfo;
 
 	if (p_out_buffer)
-		toaster::gpu::destroyBuffer(p_out_buffer);
+		toaster::gpu::buffer_destroy(bd->gpuCtx, p_out_buffer);
 
 	uint64                   buffer_size_aligned = TST_ALIGN(IM_MAX(v->minAllocationSize, p_new_size), bd->bufferMemoryAlignment);
 	toaster::gpu::BufferDesc buffer_desc{};
 	buffer_desc.size       = buffer_size_aligned;
 	buffer_desc.usage      = p_usage_flags;
 	buffer_desc.memoryType = toaster::gpu::EMemoryType::eHostVisibleCoherent;
-	p_out_buffer           = toaster::gpu::createBuffer(buffer_desc);
+	p_out_buffer           = toaster::gpu::buffer_create(bd->gpuCtx, buffer_desc);
 
 	p_out_size = buffer_size_aligned;
 }
@@ -94,8 +98,8 @@ struct PushData
 {
 	uintptr vertexBufferAddress;
 
-	tsm::float2 scale;
-	tsm::float2 translate;
+	toaster::math::Float2 scale;
+	toaster::math::Float2 translate;
 
 	struct TexData
 	{
@@ -111,26 +115,26 @@ static void ImGui_ImplToaster_SetupRenderState(ImDrawData *draw_data, toaster::g
 {
 	ImGui_ImplToaster_Data *bd = ImGui_ImplToaster_GetBackendData();
 
-	toaster::gpu::bindShaders(p_command_list, {bd->vertexShader, bd->fragmentShader});
+	toaster::gpu::cmd_bind_shaders(bd->gpuCtx, p_command_list, {bd->vertexShader, bd->fragmentShader});
 
-	toaster::gpu::setPrimitiveTopology(p_command_list, toaster::gpu::EPrimitiveTopology::eTriangleList);
-	toaster::gpu::setPrimitiveRestart(p_command_list, false);
+	toaster::gpu::cmd_set_primitive_topology(bd->gpuCtx, p_command_list, toaster::gpu::EPrimitiveTopology::eTriangleList);
+	toaster::gpu::cmd_set_primitive_restart(bd->gpuCtx, p_command_list, false);
 
-	toaster::gpu::setRasterizerDiscardEnable(p_command_list, false);
-	toaster::gpu::setPolygonMode(p_command_list, toaster::gpu::EPolygonMode::eFill);
-	toaster::gpu::setCullMode(p_command_list, toaster::gpu::ECullMode::eNone);
-	toaster::gpu::setFrontFace(p_command_list, toaster::gpu::EFrontFace::eCCW);
-	toaster::gpu::setDepthBias(p_command_list, false);
-	toaster::gpu::setLineWidth(p_command_list, 1.0f);
+	toaster::gpu::cmd_set_rasterizer_discard_enable(bd->gpuCtx, p_command_list, false);
+	toaster::gpu::cmd_set_polygon_mode(bd->gpuCtx, p_command_list, toaster::gpu::EPolygonMode::eFill);
+	toaster::gpu::cmd_set_cull_mode(bd->gpuCtx, p_command_list, toaster::gpu::ECullMode::eNone);
+	toaster::gpu::cmd_set_front_face(bd->gpuCtx, p_command_list, toaster::gpu::EFrontFace::eCCW);
+	toaster::gpu::cmd_set_depth_bias(bd->gpuCtx, p_command_list, false);
+	toaster::gpu::cmd_set_line_width(bd->gpuCtx, p_command_list, 1.0f);
 
-	toaster::gpu::setRasterizationSamples(p_command_list, bd->ToasterInitInfo.PipelineInfoMain.msaaSamples);
+	toaster::gpu::cmd_set_rasterization_samples(bd->gpuCtx, p_command_list, toaster::gpu::ESampleCount::e1);
 
-	toaster::gpu::setDepthState(p_command_list, false);
-	toaster::gpu::setStencilState(p_command_list, false);
+	toaster::gpu::cmd_set_depth_state(bd->gpuCtx, p_command_list, false);
+	toaster::gpu::cmd_set_stencil_state(bd->gpuCtx, p_command_list, false);
 
-	toaster::gpu::setColourWriteEnable(p_command_list, {true});
-	toaster::gpu::setColourWriteMask(p_command_list, {toaster::gpu::EColourComponentFlagBits::eAll});
-	toaster::gpu::setColourBlendEnable(p_command_list, {true});
+	toaster::gpu::cmd_set_colour_write_enable(bd->gpuCtx, p_command_list, {true});
+	toaster::gpu::cmd_set_colour_write_mask(bd->gpuCtx, p_command_list, {toaster::gpu::EColourComponentFlagBits::eAll});
+	toaster::gpu::cmd_set_colour_blend_enable(bd->gpuCtx, p_command_list, {true});
 
 	toaster::gpu::ColourBlendEquation blend_equation{};
 	blend_equation.srcColorBlendFactor = toaster::gpu::EBlendFactor::eSrcAlpha;
@@ -139,25 +143,25 @@ static void ImGui_ImplToaster_SetupRenderState(ImDrawData *draw_data, toaster::g
 	blend_equation.srcAlphaBlendFactor = toaster::gpu::EBlendFactor::eOne;
 	blend_equation.dstAlphaBlendFactor = toaster::gpu::EBlendFactor::eOneMinusSrcAlpha;
 	blend_equation.alphaBlendOp        = toaster::gpu::EBlendOp::eAdd;
-	toaster::gpu::setColourBlendEquation(p_command_list, blend_equation);
+	toaster::gpu::cmd_set_colour_blend_equation(bd->gpuCtx, p_command_list, blend_equation);
 
 	if (draw_data->TotalVtxCount > 0)
 	{
-		toaster::gpu::bindIndexBuffer(p_command_list, rb->indexBuffer, toaster::gpu::EIndexType::eUint16);
+		toaster::gpu::cmd_bind_index_buffer(bd->gpuCtx, p_command_list, rb->indexBuffer, toaster::gpu::EIndexType::eUint16);
 	}
 
-	toaster::gpu::setViewport(p_command_list, tsm::Viewport{{static_cast<float32>(fb_width), static_cast<float32>(fb_height)}});
+	toaster::gpu::cmd_set_viewport(bd->gpuCtx, p_command_list, toaster::math::Viewport{{static_cast<float32>(fb_width), static_cast<float32>(fb_height)}});
 
 	PushData push_data{};
 
-	push_data.vertexBufferAddress = toaster::gpu::getBufferAddress(rb->vertexBuffer);
+	push_data.vertexBufferAddress = toaster::gpu::buffer_get_address(bd->gpuCtx, rb->vertexBuffer);
 
 	push_data.scale.x     = 2.0f / draw_data->DisplaySize.x;
 	push_data.scale.y     = 2.0f / draw_data->DisplaySize.y;
 	push_data.translate.x = -1.0f - draw_data->DisplayPos.x * push_data.scale.x;
 	push_data.translate.y = -1.0f - draw_data->DisplayPos.y * push_data.scale.y;
 
-	toaster::gpu::pushData(p_command_list, push_data);
+	toaster::gpu::cmd_push_data(bd->gpuCtx, p_command_list, push_data);
 }
 
 // Render function
@@ -206,8 +210,8 @@ void ImGui_ImplToaster_RenderDrawData(ImDrawData *draw_data, toaster::gpu::Comma
 			CreateOrResizeBuffer(rb->indexBuffer, rb->indexBufferSize, index_size, toaster::gpu::EBufferUsageFlagBits::eIndexBuffer);
 
 		// Upload vertex/index data into a single contiguous GPU buffer
-		ImDrawVert *vtx_dst{static_cast<ImDrawVert *>(toaster::gpu::getBufferMappedData(rb->vertexBuffer))};
-		ImDrawIdx * idx_dst{static_cast<ImDrawIdx *>(toaster::gpu::getBufferMappedData(rb->indexBuffer))};
+		ImDrawVert *vtx_dst{static_cast<ImDrawVert *>(toaster::gpu::buffer_get_mapped_data(bd->gpuCtx, rb->vertexBuffer))};
+		ImDrawIdx * idx_dst{static_cast<ImDrawIdx *>(toaster::gpu::buffer_get_mapped_data(bd->gpuCtx, rb->indexBuffer))};
 
 		for (const ImDrawList *draw_list: draw_data->CmdLists)
 		{
@@ -270,12 +274,12 @@ void ImGui_ImplToaster_RenderDrawData(ImDrawData *draw_data, toaster::gpu::Comma
 					continue;
 
 				// Apply scissor/clipping rectangle
-				tsm::Rect scissor{};
+				toaster::math::Rect scissor{};
 				scissor.offset.x = static_cast<int32>(clip_min.x);
 				scissor.offset.y = static_cast<int32>(clip_min.y);
 				scissor.size.x   = static_cast<uint32>(clip_max.x - clip_min.x);
 				scissor.size.y   = static_cast<uint32>(clip_max.y - clip_min.y);
-				toaster::gpu::setScissor(p_command_list, scissor);
+				toaster::gpu::cmd_set_scissor(bd->gpuCtx, p_command_list, scissor);
 
 				// Bind DescriptorSet with font or user texture
 				auto tex_heap_slot = static_cast<uint32>(pcmd->GetTexID());
@@ -285,13 +289,13 @@ void ImGui_ImplToaster_RenderDrawData(ImDrawData *draw_data, toaster::gpu::Comma
 					tex_data.texHeapSlot     = tex_heap_slot;
 					tex_data.samplerHeapSlot = bd->TexSamplerLinearHeapSlot;
 					IM_ASSERT(tex_data.texHeapSlot != UINT32_MAX && tex_data.samplerHeapSlot != UINT32_MAX);
-					toaster::gpu::pushData<PushData::TexData>(p_command_list, tex_data, offsetof(PushData, texData));
+					toaster::gpu::cmd_push_data<PushData::TexData>(bd->gpuCtx, p_command_list, tex_data, offsetof(PushData, texData));
 				}
 				last_tex_heap_slot = tex_heap_slot;
 
 				// Draw
-				toaster::gpu::drawIndexed(p_command_list, pcmd->ElemCount, 1, pcmd->IdxOffset + global_idx_offset,
-										  static_cast<int32>(pcmd->VtxOffset) + global_vtx_offset, 0);
+				toaster::gpu::cmd_draw_indexed(bd->gpuCtx, p_command_list, pcmd->ElemCount, 1, pcmd->IdxOffset + global_idx_offset,
+											   static_cast<int32>(pcmd->VtxOffset) + global_vtx_offset, 0);
 			}
 		}
 		global_idx_offset += draw_list->IdxBuffer.Size;
@@ -299,7 +303,7 @@ void ImGui_ImplToaster_RenderDrawData(ImDrawData *draw_data, toaster::gpu::Comma
 	}
 	platform_io.Renderer_RenderState = nullptr;
 
-	toaster::gpu::setScissor(p_command_list, tsm::Rect{{static_cast<uint32>(fb_width), static_cast<uint32>(fb_height)}});
+	toaster::gpu::cmd_set_scissor(bd->gpuCtx, p_command_list, toaster::math::Rect{{static_cast<uint32>(fb_width), static_cast<uint32>(fb_height)}});
 }
 
 static void ImGui_ImplToaster_DestroyTexture(ImTextureData *tex)
@@ -310,7 +314,7 @@ static void ImGui_ImplToaster_DestroyTexture(ImTextureData *tex)
 		ImGui_ImplToaster_Data *    bd = ImGui_ImplToaster_GetBackendData();
 		ImGui_ImplToaster_InitInfo *v  = &bd->ToasterInitInfo;
 		ImGui_ImplToaster_RemoveTexture(backend_tex->heapSlot);
-		toaster::gpu::destroyTexture(backend_tex->texture);
+		toaster::gpu::texture_destroy(bd->gpuCtx, backend_tex->texture);
 		IM_DELETE(backend_tex);
 
 		// Clear identifiers and mark as destroyed (in order to allow e.g. calling InvalidateDeviceObjects while running)
@@ -342,7 +346,7 @@ void ImGui_ImplToaster_UpdateTexture(ImTextureData *tex)
 		texture_desc.sampleCount = toaster::gpu::ESampleCount::e1;
 		texture_desc.usage       = toaster::gpu::ETextureUsageFlagBits::eSampled | toaster::gpu::ETextureUsageFlagBits::eTransferDst;
 
-		backend_tex->texture  = toaster::gpu::createTexture(texture_desc);
+		backend_tex->texture  = toaster::gpu::texture_create(bd->gpuCtx, texture_desc);
 		backend_tex->heapSlot = ImGui_ImplToaster_AddTexture(backend_tex->texture);
 
 		// Store identifiers
@@ -365,7 +369,7 @@ void ImGui_ImplToaster_UpdateTexture(ImTextureData *tex)
 
 		uint64 upload_pitch{(uint64) upload_w * tex->BytesPerPixel};
 
-		toaster::gpu::upload::TextureUploadDesc upload_desc{};
+		toaster::gpu::TextureUploadDesc upload_desc{};
 		upload_desc.size       = upload_pitch * upload_h;
 		upload_desc.extent     = {static_cast<uint32>(upload_w), static_cast<uint32>(upload_h), 1u};
 		upload_desc.offset     = {upload_x, upload_y, 0};
@@ -379,9 +383,9 @@ void ImGui_ImplToaster_UpdateTexture(ImTextureData *tex)
 
 		upload_desc.data = upload_data.data();
 
-		const auto state_tracker{toaster::gpu::upload::registerStateTracker(1u)};
-		toaster::gpu::upload::uploadDataToTexture(upload_desc, state_tracker);
-		toaster::gpu::upload::waitForStateTracker(state_tracker);
+		const auto state_tracker{toaster::gpu::state_tracker_register(bd->uploadCtx, 1u)};
+		toaster::gpu::upload_data_to_texture(bd->uploadCtx, upload_desc, state_tracker);
+		toaster::gpu::state_tracker_wait_for(bd->uploadCtx, state_tracker);
 
 		tex->SetStatus(ImTextureStatus_OK);
 	}
@@ -402,7 +406,7 @@ static void ImGui_ImplToaster_CreateShaderModules()
 		vertex_shader_desc.stage          = toaster::gpu::EShaderStageFlagBits::eVertex;
 		vertex_shader_desc.nextStage      = toaster::gpu::EShaderStageFlagBits::ePixel;
 
-		bd->vertexShader = toaster::gpu::createShader(vertex_shader_desc);
+		bd->vertexShader = toaster::gpu::shader_create(bd->gpuCtx, vertex_shader_desc);
 	}
 	if (!bd->fragmentShader)
 	{
@@ -413,7 +417,7 @@ static void ImGui_ImplToaster_CreateShaderModules()
 		fragment_shader_desc.stage          = toaster::gpu::EShaderStageFlagBits::ePixel;
 		fragment_shader_desc.nextStage      = toaster::gpu::EShaderStageFlagBits::eNone;
 
-		bd->fragmentShader = toaster::gpu::createShader(fragment_shader_desc);
+		bd->fragmentShader = toaster::gpu::shader_create(bd->gpuCtx, fragment_shader_desc);
 	}
 }
 
@@ -435,9 +439,9 @@ bool ImGui_ImplToaster_CreateDeviceObjects()
 		sampler_desc.maxLod        = 1000.0f;
 		sampler_desc.maxAnisotropy = 1.0f;
 
-		bd->TexSamplerLinear         = toaster::gpu::createSampler(sampler_desc);
-		bd->TexSamplerLinearHeapSlot = toaster::gpu::allocSamplerHeapSlot(bd->samplerHeap);
-		toaster::gpu::writeSamplerDescriptor(bd->samplerHeap, bd->TexSamplerLinearHeapSlot, bd->TexSamplerLinear);
+		bd->TexSamplerLinear         = toaster::gpu::sampler_create(bd->gpuCtx, sampler_desc);
+		bd->TexSamplerLinearHeapSlot = toaster::gpu::sampler_descriptor_heap_alloc_sampler_slot(bd->gpuCtx, bd->samplerHeap);
+		toaster::gpu::sampler_descriptor_heap_write_sampler(bd->gpuCtx, bd->samplerHeap, bd->TexSamplerLinearHeapSlot, bd->TexSamplerLinear);
 	}
 
 	ImGui_ImplToaster_CreateShaderModules();
@@ -458,13 +462,13 @@ void ImGui_ImplToaster_DestroyDeviceObjects()
 
 	if (bd->TexSamplerLinear)
 	{
-		toaster::gpu::freeSamplerHeapSlot(bd->samplerHeap, bd->TexSamplerLinearHeapSlot);
-		toaster::gpu::destroySampler(bd->TexSamplerLinear);
+		toaster::gpu::sampler_descriptor_heap_free_sampler_slot(bd->gpuCtx, bd->samplerHeap, bd->TexSamplerLinearHeapSlot);
+		toaster::gpu::sampler_destroy(bd->gpuCtx, bd->TexSamplerLinear);
 	}
 	if (bd->vertexShader)
-		toaster::gpu::destroyShader(bd->vertexShader);
+		toaster::gpu::shader_destroy(bd->gpuCtx, bd->vertexShader);
 	if (bd->fragmentShader)
-		toaster::gpu::destroyShader(bd->fragmentShader);
+		toaster::gpu::shader_destroy(bd->gpuCtx, bd->fragmentShader);
 }
 
 bool ImGui_ImplToaster_Init(ImGui_ImplToaster_InitInfo &info)
@@ -482,6 +486,9 @@ bool ImGui_ImplToaster_Init(ImGui_ImplToaster_InitInfo &info)
 	io.BackendFlags            |= ImGuiBackendFlags_RendererHasViewports; // We can create multi-viewports on the Renderer side (optional)
 
 	bd->ToasterInitInfo = info;
+
+	bd->gpuCtx    = info.gpuCtx;
+	bd->uploadCtx = info.uploadCtx;
 
 	bd->resourceHeap = info.resourceHeap;
 	bd->samplerHeap  = info.samplerHeap;
@@ -530,8 +537,8 @@ uint32 ImGui_ImplToaster_AddTexture(toaster::gpu::TextureHandle p_texture)
 {
 	const ImGui_ImplToaster_Data *bd = ImGui_ImplToaster_GetBackendData();
 
-	const uint32 heap_slot{toaster::gpu::allocTextureHeapSlot(bd->resourceHeap)};
-	toaster::gpu::writeTextureDescriptor(bd->resourceHeap, heap_slot, p_texture, false);
+	const uint32 heap_slot{toaster::gpu::resource_descriptor_heap_alloc_texture_slot(bd->gpuCtx, bd->resourceHeap)};
+	toaster::gpu::resource_descriptor_heap_write_texture(bd->gpuCtx, bd->resourceHeap, heap_slot, p_texture, false);
 
 	return heap_slot;
 }
@@ -539,6 +546,6 @@ uint32 ImGui_ImplToaster_AddTexture(toaster::gpu::TextureHandle p_texture)
 void ImGui_ImplToaster_RemoveTexture(uint32 p_texture_slot)
 {
 	ImGui_ImplToaster_Data *bd = ImGui_ImplToaster_GetBackendData();
-	toaster::gpu::freeTextureHeapSlot(bd->resourceHeap, p_texture_slot);
+	toaster::gpu::resource_descriptor_heap_free_texture_slot(bd->gpuCtx, bd->resourceHeap, p_texture_slot);
 }
 #endif // #ifndef IMGUI_DISABLE

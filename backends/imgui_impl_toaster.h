@@ -3,20 +3,21 @@
 #ifndef IMGUI_DISABLE
 #include "imgui.h"
 
-#include <toast_gpu/api.hpp>
+#include <toast_gpu/fwd.hpp>
 
-struct ImGui_ImplToaster_PipelineInfo
+namespace toaster::gpu
 {
-	toaster::gpu::ESampleCount msaaSamples{toaster::gpu::ESampleCount::e1};
-};
+	struct GPUContext;
+	struct UploadContext;
+}
 
 struct ImGui_ImplToaster_InitInfo
 {
+	toaster::gpu::GPUContext *   gpuCtx{nullptr};
+	toaster::gpu::UploadContext *uploadCtx{nullptr};
+
 	toaster::gpu::ResourceDescriptorHeapHandle resourceHeap{nullptr};
 	toaster::gpu::SamplerDescriptorHeapHandle  samplerHeap{nullptr};
-
-	ImGui_ImplToaster_PipelineInfo PipelineInfoMain;
-	ImGui_ImplToaster_PipelineInfo PipelineInfoForViewports;
 
 	toaster::gpu::ShaderHandle customShaderVert{nullptr};
 	toaster::gpu::ShaderHandle customShaderFrat{nullptr};
