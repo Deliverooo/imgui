@@ -65,8 +65,7 @@ struct ImGui_ImplToaster_Data
 	toaster::gpu::ResourceDescriptorHeapHandle resourceHeap{nullptr};
 	toaster::gpu::SamplerDescriptorHeapHandle  samplerHeap{nullptr};
 
-	toaster::gpu::SamplerHandle TexSamplerLinear;
-	uint32                      TexSamplerLinearHeapSlot;
+	uint32 TexSamplerLinearHeapSlot;
 
 	uint64 bufferMemoryAlignment{256u};
 };
@@ -426,7 +425,7 @@ bool ImGui_ImplToaster_CreateDeviceObjects()
 	ImGui_ImplToaster_Data *    bd = ImGui_ImplToaster_GetBackendData();
 	ImGui_ImplToaster_InitInfo *v  = &bd->ToasterInitInfo;
 
-	if (!bd->TexSamplerLinear.valid())
+	if (bd->TexSamplerLinearHeapSlot == UINT32_MAX)
 	{
 		toaster::gpu::SamplerDesc sampler_desc{};
 		sampler_desc.minFilter     = toaster::gpu::EFilter::eLinear;
@@ -439,9 +438,8 @@ bool ImGui_ImplToaster_CreateDeviceObjects()
 		sampler_desc.maxLod        = 1000.0f;
 		sampler_desc.maxAnisotropy = 1.0f;
 
-		bd->TexSamplerLinear         = toaster::gpu::sampler_create(bd->gpuCtx, sampler_desc);
 		bd->TexSamplerLinearHeapSlot = toaster::gpu::sampler_descriptor_heap_alloc_sampler_slot(bd->gpuCtx, bd->samplerHeap);
-		toaster::gpu::sampler_descriptor_heap_write_sampler(bd->gpuCtx, bd->samplerHeap, bd->TexSamplerLinearHeapSlot, bd->TexSamplerLinear);
+		toaster::gpu::sampler_descriptor_heap_write_sampler(bd->gpuCtx, bd->samplerHeap, bd->TexSamplerLinearHeapSlot, sampler_desc);
 	}
 
 	ImGui_ImplToaster_CreateShaderModules();
@@ -460,11 +458,9 @@ void ImGui_ImplToaster_DestroyDeviceObjects()
 		if (tex->RefCount == 1)
 			ImGui_ImplToaster_DestroyTexture(tex);
 
-	if (bd->TexSamplerLinear)
-	{
+	if (bd->TexSamplerLinearHeapSlot != UINT32_MAX)
 		toaster::gpu::sampler_descriptor_heap_free_sampler_slot(bd->gpuCtx, bd->samplerHeap, bd->TexSamplerLinearHeapSlot);
-		toaster::gpu::sampler_destroy(bd->gpuCtx, bd->TexSamplerLinear);
-	}
+
 	if (bd->vertexShader)
 		toaster::gpu::shader_destroy(bd->gpuCtx, bd->vertexShader);
 	if (bd->fragmentShader)
