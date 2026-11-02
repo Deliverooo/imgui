@@ -389,7 +389,7 @@ void ImGui_ImplToaster_UpdateTexture(ImTextureData *tex)
 		upload_desc.data = upload_data.data();
 
 		const auto state_tracker{toaster::gpu::state_tracker_register(bd->uploadCtx, 1u)};
-		toaster::gpu::upload_data_to_texture(bd->uploadCtx, backend_tex->texture, upload_desc, state_tracker);
+		toaster::gpu::upload_data_to_textures(bd->uploadCtx, backend_tex->texture, upload_desc, state_tracker);
 		toaster::gpu::state_tracker_wait_for(bd->uploadCtx, state_tracker);
 
 		tex->SetStatus(ImTextureStatus_OK);
