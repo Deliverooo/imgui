@@ -52,6 +52,11 @@ struct ImGui_ImplToaster_ViewportData
 	bool                                   SwapChainSuboptimal{false};  // Flag when VK_SUBOPTIMAL_KHR was returned.
 };
 
+enum ImGuiImplToasterShaderType
+{
+	ImGuiImplToasterShaderType_Vertex = 0u, ImGuiImplToasterShaderType_Pixel = 1u, ImGuiImplToasterShaderType_Max = 2u,
+};
+
 struct ImGui_ImplToaster_Data
 {
 	ImGui_ImplToaster_InitInfo ToasterInitInfo;
@@ -59,8 +64,7 @@ struct ImGui_ImplToaster_Data
 	toaster::gpu::GPUContext *   gpuCtx{nullptr};
 	toaster::gpu::UploadContext *uploadCtx{nullptr};
 
-	toaster::gpu::ShaderHandle vertexShader{nullptr};
-	toaster::gpu::ShaderHandle fragmentShader{nullptr};
+	toaster::Array<toaster::gpu::ShaderHandle, ImGuiImplToasterShaderType_Max> shaders;
 
 	toaster::gpu::ResourceDescriptorHeapHandle resourceHeap{nullptr};
 	toaster::gpu::SamplerDescriptorHeapHandle  samplerHeap{nullptr};
@@ -114,7 +118,7 @@ static void ImGui_ImplToaster_SetupRenderState(ImDrawData *draw_data, toaster::g
 {
 	ImGui_ImplToaster_Data *bd = ImGui_ImplToaster_GetBackendData();
 
-	toaster::gpu::cmd_bind_shaders(bd->gpuCtx, p_command_list, {bd->vertexShader, bd->fragmentShader});
+	toaster::gpu::cmd_bind_shaders(bd->gpuCtx, p_command_list, bd->shaders);
 
 	toaster::gpu::cmd_set_primitive_topology(bd->gpuCtx, p_command_list, toaster::gpu::EPrimitiveTopology::eTriangleList);
 	toaster::gpu::cmd_set_primitive_restart(bd->gpuCtx, p_command_list, false);
@@ -368,13 +372,15 @@ void ImGui_ImplToaster_UpdateTexture(ImTextureData *tex)
 
 		uint64 upload_pitch{(uint64) upload_w * tex->BytesPerPixel};
 
+		toaster::gpu::BufferTextureCopyRegion copy_region{};
+		copy_region.textureExtent                 = {static_cast<uint32>(upload_w), static_cast<uint32>(upload_h), 1u};
+		copy_region.textureOffset                 = {upload_x, upload_y, 0};
+		copy_region.textureSubresource.layerCount = 1u;
+		copy_region.textureSubresource.baseLayer  = 0u;
+
 		toaster::gpu::TextureUploadDesc upload_desc{};
-		upload_desc.size       = upload_pitch * upload_h;
-		upload_desc.extent     = {static_cast<uint32>(upload_w), static_cast<uint32>(upload_h), 1u};
-		upload_desc.offset     = {upload_x, upload_y, 0};
-		upload_desc.layerCount = 1u;
-		upload_desc.baseLayer  = 0u;
-		upload_desc.dstTexture = backend_tex->texture;
+		upload_desc.size          = upload_pitch * upload_h;
+		upload_desc.uploadRegions = copy_region;
 
 		std::vector<uint8> upload_data(upload_desc.size);
 		for (int y = 0; y < upload_h; y++)
@@ -383,7 +389,7 @@ void ImGui_ImplToaster_UpdateTexture(ImTextureData *tex)
 		upload_desc.data = upload_data.data();
 
 		const auto state_tracker{toaster::gpu::state_tracker_register(bd->uploadCtx, 1u)};
-		toaster::gpu::upload_data_to_texture(bd->uploadCtx, upload_desc, state_tracker);
+		toaster::gpu::upload_data_to_texture(bd->uploadCtx, backend_tex->texture, upload_desc, state_tracker);
 		toaster::gpu::state_tracker_wait_for(bd->uploadCtx, state_tracker);
 
 		tex->SetStatus(ImTextureStatus_OK);
@@ -396,28 +402,25 @@ void ImGui_ImplToaster_UpdateTexture(ImTextureData *tex)
 static void ImGui_ImplToaster_CreateShaderModules()
 {
 	ImGui_ImplToaster_Data *bd = ImGui_ImplToaster_GetBackendData();
-	if (!bd->vertexShader)
-	{
-		toaster::gpu::ShaderDesc vertex_shader_desc{};
-		vertex_shader_desc.entryPointName = "main";
-		vertex_shader_desc.code           = g_vertex_shader_bytecode;
-		vertex_shader_desc.codeSizeWords  = sizeof(g_vertex_shader_bytecode) / sizeof(uint32);
-		vertex_shader_desc.stage          = toaster::gpu::EShaderStageFlagBits::eVertex;
-		vertex_shader_desc.nextStage      = toaster::gpu::EShaderStageFlagBits::ePixel;
 
-		bd->vertexShader = toaster::gpu::shader_create(bd->gpuCtx, vertex_shader_desc);
-	}
-	if (!bd->fragmentShader)
-	{
-		toaster::gpu::ShaderDesc fragment_shader_desc{};
-		fragment_shader_desc.entryPointName = "main";
-		fragment_shader_desc.code           = g_fragment_shader_bytecode;
-		fragment_shader_desc.codeSizeWords  = sizeof(g_fragment_shader_bytecode) / sizeof(uint32);
-		fragment_shader_desc.stage          = toaster::gpu::EShaderStageFlagBits::ePixel;
-		fragment_shader_desc.nextStage      = toaster::gpu::EShaderStageFlagBits::eNone;
+	toaster::Array<toaster::gpu::ShaderDesc, ImGuiImplToasterShaderType_Max> shader_descs;
 
-		bd->fragmentShader = toaster::gpu::shader_create(bd->gpuCtx, fragment_shader_desc);
-	}
+	toaster::gpu::ShaderDesc &vertex_shader_desc{shader_descs[ImGuiImplToasterShaderType_Vertex]};
+	vertex_shader_desc.entryPointName = "main";
+	vertex_shader_desc.code           = g_vertex_shader_bytecode;
+	vertex_shader_desc.codeSizeWords  = sizeof(g_vertex_shader_bytecode) / sizeof(uint32);
+	vertex_shader_desc.stage          = toaster::gpu::EShaderStageFlagBits::eVertex;
+	vertex_shader_desc.nextStage      = toaster::gpu::EShaderStageFlagBits::ePixel;
+
+	toaster::gpu::ShaderDesc &pixel_shader_desc{shader_descs[ImGuiImplToasterShaderType_Pixel]};
+	pixel_shader_desc.entryPointName = "main";
+	pixel_shader_desc.code           = g_fragment_shader_bytecode;
+	pixel_shader_desc.codeSizeWords  = sizeof(g_fragment_shader_bytecode) / sizeof(uint32);
+	pixel_shader_desc.stage          = toaster::gpu::EShaderStageFlagBits::ePixel;
+	pixel_shader_desc.nextStage      = toaster::gpu::EShaderStageFlagBits::eNone;
+
+	// Vertex links to pixel shader
+	toaster::gpu::shader_create_n(bd->gpuCtx, bd->shaders, shader_descs, true);
 }
 
 bool ImGui_ImplToaster_CreateDeviceObjects()
@@ -461,10 +464,7 @@ void ImGui_ImplToaster_DestroyDeviceObjects()
 	if (bd->TexSamplerLinearHeapSlot != UINT32_MAX)
 		toaster::gpu::sampler_descriptor_heap_free_sampler_slot(bd->gpuCtx, bd->samplerHeap, bd->TexSamplerLinearHeapSlot);
 
-	if (bd->vertexShader)
-		toaster::gpu::shader_destroy(bd->gpuCtx, bd->vertexShader);
-	if (bd->fragmentShader)
-		toaster::gpu::shader_destroy(bd->gpuCtx, bd->fragmentShader);
+	toaster::gpu::shader_destroy_n(bd->gpuCtx, bd->shaders);
 }
 
 bool ImGui_ImplToaster_Init(ImGui_ImplToaster_InitInfo &info)
