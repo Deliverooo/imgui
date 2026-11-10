@@ -6,6 +6,7 @@
 #include <backends/vulkan/glsl_shader.vert.h>
 #include <backends/vulkan/glsl_shader.frag.h>
 #include <toast_gpu/api.hpp>
+#include <toast_lib/util_defines.h>
 
 #ifndef IM_MAX
 #define IM_MAX(A, B)    (((A) >= (B)) ? (A) : (B))
