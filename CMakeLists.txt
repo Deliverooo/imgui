@@ -5,7 +5,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 project(ImGui)
 
-find_package(Toaster CONFIG REQUIRED)
+if (NOT TARGET Toaster::ToastGPU OR NOT TARGET glfw)
+	find_package(Toaster CONFIG REQUIRED)
+endif ()
 
 set(IMGUI_SRC
 		"${CMAKE_CURRENT_SOURCE_DIR}/imgui.cpp"
@@ -29,7 +31,7 @@ option(IMGUI_BUILD_TESTS "Build the one debug test" ON)
 if (IMGUI_BUILD_TESTS)
 	add_executable(ImGuiTest WIN32)
 
-	target_link_libraries(ImGuiTest PRIVATE ImGui Toaster::ToastKernel Toaster::ToastOS Toaster::ToastAsset)
+	target_link_libraries(ImGuiTest PRIVATE ImGui Toaster::ToastKernel Toaster::ToastOS)
 	target_sources(ImGuiTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/examples/example_toaster/main.cpp")
 	target_include_directories(ImGuiTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/examples/example_toaster")
 endif ()

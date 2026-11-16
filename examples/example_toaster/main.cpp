@@ -2,8 +2,6 @@
 #include <toast_os/console.hpp>
 #include <toast_os/entry_points.hpp>
 
-#include <toast_kernel/application.hpp>
-
 #include <toast_gpu/api.hpp>
 #include <toast_gpu/upload.hpp>
 
