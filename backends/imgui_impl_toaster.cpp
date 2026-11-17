@@ -1,11 +1,11 @@
 #ifndef IMGUI_DISABLE
 
 #include "imgui_impl_toaster.h"
-#include <toast_gpu/upload.hpp>
 
-#include <backends/vulkan/glsl_shader.vert.h>
 #include <backends/vulkan/glsl_shader.frag.h>
+#include <backends/vulkan/glsl_shader.vert.h>
 #include <toast_gpu/api.hpp>
+#include <toast_gpu/upload.hpp>
 #include <toast_lib/util_defines.h>
 
 #ifndef IM_MAX
@@ -24,10 +24,11 @@ void ImGui_ImplToaster_DestroyWindowRenderBuffers(ImGui_ImplToaster_ToasterRende
 // [Please zero-clear before use!]
 struct ImGui_ImplToaster_FrameRenderBuffers
 {
-	toaster::gpu::BufferHandle vertexBuffer{nullptr};
-	toaster::gpu::BufferHandle indexBuffer{nullptr};
-	uint64                     indexBufferSize{0u};
-	uint64                     vertexBufferSize{0u};
+	toaster::gpu::BufferHandle  vertexBuffer{nullptr};
+	toaster::gpu::BufferHandle  indexBuffer{nullptr};
+	uint64                      indexBufferSize{0u};
+	uint64                      vertexBufferSize{0u};
+	toaster::gpu::DeviceAddress vertexBufferAddress{toaster::gpu::nullGpuPtr};
 };
 
 struct ImGui_ImplToaster_ToasterRenderBuffers
@@ -53,10 +54,7 @@ struct ImGui_ImplToaster_ViewportData
 	bool                                   SwapChainSuboptimal{false};  // Flag when VK_SUBOPTIMAL_KHR was returned.
 };
 
-enum ImGuiImplToasterShaderType
-{
-	ImGuiImplToasterShaderType_Vertex = 0u, ImGuiImplToasterShaderType_Pixel = 1u, ImGuiImplToasterShaderType_Max = 2u,
-};
+enum class EImGuiImplToasterShaderStage : uint8 { eVertex = 0u, ePixel = 1u, eMax = 2u };
 
 struct ImGui_ImplToaster_Data
 {
@@ -65,7 +63,7 @@ struct ImGui_ImplToaster_Data
 	toaster::gpu::GPUContext *   gpuCtx{nullptr};
 	toaster::gpu::UploadContext *uploadCtx{nullptr};
 
-	toaster::Array<toaster::gpu::ShaderHandle, ImGuiImplToasterShaderType_Max> shaders;
+	toaster::EArray<toaster::gpu::ShaderHandle, EImGuiImplToasterShaderStage, EImGuiImplToasterShaderStage::eMax> shaders;
 
 	toaster::gpu::ResourceDescriptorHeapHandle resourceHeap{nullptr};
 	toaster::gpu::SamplerDescriptorHeapHandle  samplerHeap{nullptr};
@@ -158,7 +156,7 @@ static void ImGui_ImplToaster_SetupRenderState(ImDrawData *draw_data, toaster::g
 
 	PushData push_data{};
 
-	push_data.vertexBufferAddress = toaster::gpu::buffer_get_address(bd->gpuCtx, rb->vertexBuffer);
+	push_data.vertexBufferAddress = rb->vertexBufferAddress;
 
 	push_data.scale.x     = 2.0f / draw_data->DisplaySize.x;
 	push_data.scale.y     = 2.0f / draw_data->DisplaySize.y;
@@ -172,8 +170,8 @@ static void ImGui_ImplToaster_SetupRenderState(ImDrawData *draw_data, toaster::g
 void ImGui_ImplToaster_RenderDrawData(ImDrawData *draw_data, toaster::gpu::CommandListHandle p_command_list)
 {
 	// Avoid rendering when minimized, scale coordinates for retina displays (screen coordinates != framebuffer coordinates)
-	int fb_width  = (int) (draw_data->DisplaySize.x * draw_data->FramebufferScale.x);
-	int fb_height = (int) (draw_data->DisplaySize.y * draw_data->FramebufferScale.y);
+	const int32 fb_width{static_cast<int32>(draw_data->DisplaySize.x * draw_data->FramebufferScale.x)};
+	const int32 fb_height{static_cast<int32>(draw_data->DisplaySize.y * draw_data->FramebufferScale.y)};
 	if (fb_width <= 0 || fb_height <= 0)
 		return;
 
@@ -188,8 +186,8 @@ void ImGui_ImplToaster_RenderDrawData(ImDrawData *draw_data, toaster::gpu::Comma
 	ImGui_ImplToaster_InitInfo *v  = &bd->ToasterInitInfo;
 
 	// Allocate array to store enough vertex/index buffers. Each unique viewport gets its own storage.
-	auto *viewport_renderer_data = static_cast<ImGui_ImplToaster_ViewportData *>(draw_data->OwnerViewport->RendererUserData);
-	IM_ASSERT(viewport_renderer_data != nullptr);
+	const auto viewport_renderer_data{static_cast<ImGui_ImplToaster_ViewportData *>(draw_data->OwnerViewport->RendererUserData)};
+	IM_ASSERT(viewport_renderer_data);
 	ImGui_ImplToaster_ToasterRenderBuffers *wrb = &viewport_renderer_data->RenderBuffers;
 	if (wrb->FrameRenderBuffers.Size == 0)
 	{
@@ -209,13 +207,16 @@ void ImGui_ImplToaster_RenderDrawData(ImDrawData *draw_data, toaster::gpu::Comma
 		uint64 index_size  = TST_ALIGN(draw_data->TotalIdxCount * sizeof(ImDrawIdx), bd->bufferMemoryAlignment);
 
 		if (!rb->vertexBuffer || rb->vertexBufferSize < vertex_size)
+		{
 			CreateOrResizeBuffer(rb->vertexBuffer, rb->vertexBufferSize, vertex_size, toaster::gpu::EBufferUsageFlagBits::eStorageBuffer);
+			rb->vertexBufferAddress = toaster::gpu::buffer_get_address(bd->gpuCtx, rb->vertexBuffer);
+		}
 		if (!rb->indexBuffer || rb->indexBufferSize < index_size)
 			CreateOrResizeBuffer(rb->indexBuffer, rb->indexBufferSize, index_size, toaster::gpu::EBufferUsageFlagBits::eIndexBuffer);
 
 		// Upload vertex/index data into a single contiguous GPU buffer
-		ImDrawVert *vtx_dst{static_cast<ImDrawVert *>(toaster::gpu::buffer_get_mapped_data(bd->gpuCtx, rb->vertexBuffer))};
-		ImDrawIdx * idx_dst{static_cast<ImDrawIdx *>(toaster::gpu::buffer_get_mapped_data(bd->gpuCtx, rb->indexBuffer))};
+		auto vtx_dst{static_cast<ImDrawVert *>(toaster::gpu::buffer_get_mapped_data(bd->gpuCtx, rb->vertexBuffer))};
+		auto idx_dst{static_cast<ImDrawIdx *>(toaster::gpu::buffer_get_mapped_data(bd->gpuCtx, rb->indexBuffer))};
 
 		for (const ImDrawList *draw_list: draw_data->CmdLists)
 		{
@@ -236,20 +237,20 @@ void ImGui_ImplToaster_RenderDrawData(ImDrawData *draw_data, toaster::gpu::Comma
 	platform_io.Renderer_RenderState = &render_state;
 
 	// Will project scissor/clipping rectangles into framebuffer space
-	ImVec2 clip_off   = draw_data->DisplayPos;       // (0,0) unless using multi-viewports
-	ImVec2 clip_scale = draw_data->FramebufferScale; // (1,1) unless using retina display which are often (2,2)
+	const ImVec2 clip_off{draw_data->DisplayPos};         // (0,0) unless using multi-viewports
+	const ImVec2 clip_scale{draw_data->FramebufferScale}; // (1,1) unless using retina display which are often (2,2)
 
 	// Render command lists
 	// (Because we merged all buffers into a single one, we maintain our own offset into them)
 	uint32 last_tex_heap_slot{UINT32_MAX};
-	int    global_vtx_offset = 0;
-	int    global_idx_offset = 0;
+	uint32 global_vtx_offset{0u};
+	uint32 global_idx_offset{0u};
 	for (const ImDrawList *draw_list: draw_data->CmdLists)
 	{
-		for (int cmd_i = 0; cmd_i < draw_list->CmdBuffer.Size; cmd_i++)
+		for (uint32 cmd_i{0u}; cmd_i < draw_list->CmdBuffer.Size; ++cmd_i)
 		{
-			const ImDrawCmd *pcmd = &draw_list->CmdBuffer[cmd_i];
-			if (pcmd->UserCallback != nullptr)
+			const ImDrawCmd *pcmd{&draw_list->CmdBuffer[cmd_i]};
+			if (pcmd->UserCallback)
 			{
 				// User callback, registered via ImDrawList::AddCallback()
 				// (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
@@ -298,12 +299,12 @@ void ImGui_ImplToaster_RenderDrawData(ImDrawData *draw_data, toaster::gpu::Comma
 				last_tex_heap_slot = tex_heap_slot;
 
 				// Draw
-				toaster::gpu::cmd_draw_indexed(bd->gpuCtx, p_command_list, pcmd->ElemCount, 1, pcmd->IdxOffset + global_idx_offset,
-											   static_cast<int32>(pcmd->VtxOffset) + global_vtx_offset, 0);
+				toaster::gpu::cmd_draw_indexed(bd->gpuCtx, p_command_list, pcmd->ElemCount, 1u, pcmd->IdxOffset + global_idx_offset,
+											   static_cast<int32>(pcmd->VtxOffset + global_vtx_offset), 0u);
 			}
 		}
-		global_idx_offset += draw_list->IdxBuffer.Size;
-		global_vtx_offset += draw_list->VtxBuffer.Size;
+		global_idx_offset += static_cast<uint32>(draw_list->IdxBuffer.Size);
+		global_vtx_offset += static_cast<uint32>(draw_list->VtxBuffer.Size);
 	}
 	platform_io.Renderer_RenderState = nullptr;
 
@@ -312,7 +313,7 @@ void ImGui_ImplToaster_RenderDrawData(ImDrawData *draw_data, toaster::gpu::Comma
 
 static void ImGui_ImplToaster_DestroyTexture(ImTextureData *tex)
 {
-	if (auto *backend_tex = static_cast<ImGui_ImplToaster_Texture *>(tex->BackendUserData))
+	if (auto *backend_tex{static_cast<ImGui_ImplToaster_Texture *>(tex->BackendUserData)})
 	{
 		IM_ASSERT(backend_tex->heapSlot == static_cast<uint32>(tex->TexID));
 		ImGui_ImplToaster_Data *    bd = ImGui_ImplToaster_GetBackendData();
@@ -404,24 +405,27 @@ static void ImGui_ImplToaster_CreateShaderModules()
 {
 	ImGui_ImplToaster_Data *bd = ImGui_ImplToaster_GetBackendData();
 
-	toaster::Array<toaster::gpu::ShaderDesc, ImGuiImplToasterShaderType_Max> shader_descs;
-
-	toaster::gpu::ShaderDesc &vertex_shader_desc{shader_descs[ImGuiImplToasterShaderType_Vertex]};
-	vertex_shader_desc.entryPointName = "main";
-	vertex_shader_desc.code           = g_vertex_shader_bytecode;
-	vertex_shader_desc.codeSizeWords  = sizeof(g_vertex_shader_bytecode) / sizeof(uint32);
-	vertex_shader_desc.stage          = toaster::gpu::EShaderStageFlagBits::eVertex;
-	vertex_shader_desc.nextStage      = toaster::gpu::EShaderStageFlagBits::ePixel;
-
-	toaster::gpu::ShaderDesc &pixel_shader_desc{shader_descs[ImGuiImplToasterShaderType_Pixel]};
-	pixel_shader_desc.entryPointName = "main";
-	pixel_shader_desc.code           = g_fragment_shader_bytecode;
-	pixel_shader_desc.codeSizeWords  = sizeof(g_fragment_shader_bytecode) / sizeof(uint32);
-	pixel_shader_desc.stage          = toaster::gpu::EShaderStageFlagBits::ePixel;
-	pixel_shader_desc.nextStage      = toaster::gpu::EShaderStageFlagBits::eNone;
+	constexpr toaster::Array c_shader_descs{
+		toaster::gpu::ShaderDesc{
+			.entryPointName = "main",
+			.code = g_vertex_shader_bytecode,
+			.codeSizeWords = sizeof(g_vertex_shader_bytecode) / sizeof(uint32),
+			.nextStage = toaster::gpu::EShaderStageFlagBits::ePixel,
+			.stage = toaster::gpu::EShaderStageFlagBits::eVertex,
+			.noTaskShader = true
+		},
+		toaster::gpu::ShaderDesc{
+			.entryPointName = "main",
+			.code = g_fragment_shader_bytecode,
+			.codeSizeWords = sizeof(g_fragment_shader_bytecode) / sizeof(uint32),
+			.nextStage = toaster::gpu::EShaderStageFlagBits::eNone,
+			.stage = toaster::gpu::EShaderStageFlagBits::ePixel,
+			.noTaskShader = true
+		}
+	};
 
 	// Vertex links to pixel shader
-	toaster::gpu::shader_create_n(bd->gpuCtx, bd->shaders, shader_descs, true);
+	toaster::gpu::shader_create_n(bd->gpuCtx, bd->shaders, c_shader_descs, true);
 }
 
 bool ImGui_ImplToaster_CreateDeviceObjects()
